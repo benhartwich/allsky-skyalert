@@ -220,6 +220,12 @@ metaData = {
 STATE_FILE = os.path.join(s.ALLSKY_TMP, "allsky_skyalert_state.json")
 
 
+def _truthy(v):
+    """Checkbox args arrive from the flow config as the STRING 'true'/'false';
+    'false' is truthy in Python, so parse booleans explicitly."""
+    return v is True or (not isinstance(v, bool) and str(v).strip().lower() in ("true", "1", "yes", "on"))
+
+
 # ------------------------------ helpers ------------------------------
 
 def _readJson(path, default):
@@ -323,7 +329,7 @@ def _banner(alert):
 
 def _uploadRemote(local, fname):
     try:
-        if s.getSetting("useremotewebsite") != "true":
+        if str(s.getSetting("useremotewebsite")).lower() not in ("true", "1", "yes", "on"):
             return
         import subprocess
         scripts = s.getEnvironmentVariable("ALLSKY_SCRIPTS") or \
@@ -379,14 +385,14 @@ def _summaryText(sqm_rows, meteors, key):
 
 
 def skyalert(params, event):
-    debug = params.get("debug", False)
+    debug = _truthy(params.get("debug", False))
 
     cfg = {
-        "chan_banner": params.get("chan_banner", True),
-        "chan_telegram": params.get("chan_telegram", False),
+        "chan_banner": _truthy(params.get("chan_banner", True)),
+        "chan_telegram": _truthy(params.get("chan_telegram", False)),
         "tg_token": params.get("tg_token", "").strip(),
         "tg_chat": params.get("tg_chat", "").strip(),
-        "chan_email": params.get("chan_email", False),
+        "chan_email": _truthy(params.get("chan_email", False)),
         "smtp_host": params.get("smtp_host", "").strip(),
         "mail_to": params.get("mail_to", "").strip(),
         "email": {
@@ -410,7 +416,7 @@ def skyalert(params, event):
 
     # --- nightly summary at the dusk->dawn transition ---
     if event == "nightday":
-        if params.get("t_summary", True) and state.get("summary_key") != key and sqm_rows:
+        if _truthy(params.get("t_summary", True)) and state.get("summary_key") != key and sqm_rows:
             msg = _summaryText(sqm_rows, meteors, key)
             alert = {"t": int(time.time()), "type": "summary", "severity": "info",
                      "title": "Nightly sky summary", "message": msg}
@@ -424,7 +430,7 @@ def skyalert(params, event):
     latest = sqm_rows[-1] if sqm_rows else None
 
     # Fireball: newest confirmed meteor above the peak threshold, not yet alerted
-    if params.get("t_fireball", True) and meteors:
+    if _truthy(params.get("t_fireball", True)) and meteors:
         thr = s.int(params.get("fireball_peak", 120))
         newest = meteors[-1]
         peak = newest.get("peak")
@@ -442,7 +448,7 @@ def skyalert(params, event):
             fired.append("fireball")
 
     # Aurora candidate: index over threshold, once per night
-    if params.get("t_aurora", True) and latest is not None and latest.get("aurora") is not None:
+    if _truthy(params.get("t_aurora", True)) and latest is not None and latest.get("aurora") is not None:
         thr = s.asfloat(params.get("aurora_thr", 8))
         if latest["aurora"] >= thr and state.get("aurora_key") != key:
             alert = {"t": int(time.time()), "type": "aurora", "severity": "high",
@@ -453,7 +459,7 @@ def skyalert(params, event):
             fired.append("aurora")
 
     # Exceptional dark sky: SQM over threshold, once per night
-    if params.get("t_darksky", True) and latest is not None and latest.get("sqm") is not None:
+    if _truthy(params.get("t_darksky", True)) and latest is not None and latest.get("sqm") is not None:
         thr = s.asfloat(params.get("darksky_thr", 21.3))
         if latest["sqm"] >= thr and state.get("darksky_key") != key:
             nelm = latest.get("mlim")
